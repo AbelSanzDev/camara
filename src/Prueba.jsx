@@ -1,53 +1,68 @@
 import React, { useEffect, useRef, useState } from "react";
-import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 import Marquee from "react-fast-marquee";
-import { Button, Card, CircularProgress, Tooltip } from "@nextui-org/react";
+import { Button, Card, CircularProgress } from "@nextui-org/react";
 import { ToastContainer, toast, Bounce } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import logo from "./assets/JIGSA.png";
+
+const signos = [
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "ñ",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "ayuda",
+  "por favor",
+  "gracias",
+  "hospital",
+  "hola",
+];
 
 const MediaPipeComponent = () => {
-  const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const handsRef = useRef(null);
   const [cameraActive, setCameraActive] = useState(false);
-  const camera = useRef(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Cambiar el estado inicial a true
+  const [detections, setDetections] = useState([]);
 
   useEffect(() => {
-    if (cameraActive) {
-      toast.success("Camara On", {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-        transition: Bounce,
-      });
-    } else {
-      toast.error("Camara Off", {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-        transition: Bounce,
-      });
-    }
-  }, [cameraActive]);
+    const ws = new WebSocket("ws://localhost:8765");
 
-  useEffect(() => {
-    const loadHands = async () => {
-      const { Hands } = await import("@mediapipe/hands");
+    ws.onopen = () => {
+      console.log("Conectado al servidor WebSocket");
+      setIsLoading(false); // Desactivar el modal cuando la conexión esté abierta
+    };
 
-      const onResults = (results) => {
-        const canvasCtx = canvasRef.current.getContext("2d");
-        canvasCtx.save();
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setDetections(data.detections);
+
+      // Renderizar la imagen en el canvas
+      const canvasCtx = canvasRef.current.getContext("2d");
+      const img = new Image();
+      img.src = `data:image/jpeg;base64,${data.image}`;
+      img.onload = () => {
         canvasCtx.clearRect(
           0,
           0,
@@ -55,191 +70,122 @@ const MediaPipeComponent = () => {
           canvasRef.current.height
         );
         canvasCtx.drawImage(
-          results.image,
+          img,
           0,
           0,
           canvasRef.current.width,
           canvasRef.current.height
         );
-
-        if (results.multiHandLandmarks) {
-          for (const landmarks of results.multiHandLandmarks) {
-            drawConnectors(canvasCtx, landmarks, Hands.HAND_CONNECTIONS, {
-              color: "#00FF00",
-              lineWidth: 5,
-            });
-            drawLandmarks(canvasCtx, landmarks, {
-              color: "#FF0000",
-              lineWidth: 2,
-            });
-          }
-        }
-        canvasCtx.restore();
       };
-
-      const hands = new Hands({
-        locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-      });
-
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
-
-      hands.onResults(onResults);
-
-      handsRef.current = hands;
     };
 
-    loadHands();
+    ws.onclose = () => {
+      console.log("Desconectado del servidor WebSocket");
+      setIsLoading(true); // Volver a mostrar el modal si se desconecta
+    };
 
     return () => {
-      if (handsRef.current) {
-        handsRef.current.close();
-      }
+      ws.close();
     };
   }, []);
 
-  useEffect(() => {
-    const loadCamera = async () => {
-      const module = await import("@mediapipe/camera_utils");
-      return module.Camera;
-    };
-
-    const startCamera = async () => {
-      const Camera = await loadCamera();
-
-      if (cameraActive && videoRef.current) {
-        camera.current = new Camera(videoRef.current, {
-          onFrame: async () => {
-            if (!isLoading) {
-              setIsLoading(false);
-            }
-
-            await handsRef.current.send({ image: videoRef.current });
-            setIsLoading(false);
-          },
-          width: 640,
-          height: 480,
-        });
-        camera.current.start();
-      } else if (camera.current) {
-        camera.current.stop();
-        const canvasCtx = canvasRef.current.getContext("2d");
-        canvasCtx.clearRect(
-          0,
-          0,
-          canvasRef.current.width,
-          canvasRef.current.height
-        );
-        canvasCtx.fillStyle = "black";
-        canvasCtx.fillRect(
-          0,
-          0,
-          canvasRef.current.width,
-          canvasRef.current.height
-        );
-      }
-    };
-
-    if (cameraActive) {
-      startCamera();
-    }
-
-    return () => {
-      if (camera.current) {
-        camera.current.stop();
-        setIsLoading(false);
-        const canvasCtx = canvasRef.current.getContext("2d");
-        canvasCtx.clearRect(
-          0,
-          0,
-          canvasRef.current.width,
-          canvasRef.current.height
-        );
-        canvasCtx.fillStyle = "black";
-        canvasCtx.fillRect(
-          0,
-          0,
-          canvasRef.current.width,
-          canvasRef.current.height
-        );
-      }
-    };
-  }, [cameraActive]);
-
   const toggleCamera = () => {
-    setIsLoading(true);
+    setIsLoading(true); // Mostrar el modal cuando se activa la cámara
     setCameraActive(!cameraActive);
   };
 
   return (
-    <div>
-      <Marquee
-        className="overflow-hidden mt-5"
-        gradient={true}
-        gradientColor={"#1c1c1c"}
-        pauseOnHover={true}
-        speed={50}
-        gradientWidth={100}
-      >
-        <h1 className="text-7xl text-gray-300 font-thin">
-          {` Bienvenido `}
-          Welcome Bienvenue Willkommen Benvenuto
-          {` 欢迎 `}
-        </h1>
-      </Marquee>
-      <Card className="md:mx-[35%] grid place-items-center text-2xl mt-10 p-3">
-        <p>
-          Esta página web te ayudará a traducir LSH (Lenguas de Señas Mexicanas)
-          a través de la cámara.
-        </p>
-      </Card>
-      <div className="md:mx-[35%] grid place-items-center text-2xl mt-2 p-3">
-        <p>Presiona el icono de la cámara para comenzar a traducir.</p>
-      </div>
-      <div className="grid place-items-center mt-1">
-        <Button
-          size="lg"
-          className="py-[6rem] mb-5"
-          radius="full"
-          onClick={toggleCamera}
-          variant="light"
-          color="warning"
+    <>
+      <div className="h-full w-full pt-1 m-0 bg-gradient-to-tr  from-[#f3ccd5] to-[#bac1ee]">
+        <Marquee
+          className="overflow-hidden mt-5"
+          gradient={true}
+          gradientColor={"#bac1ee65"}
+          pauseOnHover={true}
+          speed={50}
+          gradientWidth={100}
         >
-          <lord-icon
-            src="https://cdn.lordicon.com/vneufqmz.json"
-            trigger="hover"
-            style={{ width: "150px", height: "150px" }}
-          ></lord-icon>
-        </Button>
-        <div className="grid md:grid-cols-2 grid-cols-1 gap-2 mb-10">
-          <div>
-            <video ref={videoRef} style={{ display: "none" }}></video>
-            {isLoading ? (
-              <div className="grid place-items-center">
-                <CircularProgress size="lg" aria-label="Loading..." />
-              </div>
-            ) : null}
-            <canvas
-              className="rounded-lg transition-all shadow-lg shadow-black"
-              ref={canvasRef}
-              width="640"
-              height="480"
-            ></canvas>
+          <h1 className="text-7xl text-[#51608a] font-thin">
+            Bienvenido a JIGSA Bienvenido a JIGSA
+          </h1>
+        </Marquee>
+        <div className="grid lg:grid-cols-3 grid-cols-1 items-center mt-2">
+          <div></div>
+          <div className=" text-[#51608a] text-center text-2xl mt-10 p-3">
+            <p>
+              Esta página web te ayudará a traducir LSM (Lenguas de Señas
+              Mexicanas) a través de la cámara.
+            </p>
           </div>
-          <div className="grid place-items-center md:my-0 my-6">
-            <Card className="w-[80%] p-4 text-xl text-gray-300">
-              Ejemplo de como se vera el texto
-            </Card>
+          <div className="flex lg:justify-end justify-center pr-7">
+            <img
+              className="w-[10rem]   rounded-full"
+              src={logo}
+              alt="Logo JIGSA"
+            />
           </div>
         </div>
+        <div className="grid place-items-center pb-[10rem] mt-1">
+          {/* <Button
+            size="lg"
+            className="py-[6rem] mb-5"
+            radius="full"
+            onClick={toggleCamera}
+            variant="light"
+            color="warning"
+          >
+            <lord-icon
+              src="https://cdn.lordicon.com/vneufqmz.json"
+              trigger="hover"
+              style={{ width: "150px", height: "150px" }}
+            ></lord-icon>
+          </Button> */}
+          <div className="grid md:grid-cols-2 grid-cols-1 gap-2 mb-10">
+            <div>
+              {/* {isLoading ? (
+                <div className="grid place-items-center">
+                  <CircularProgress size="lg" aria-label="Loading..." />
+                </div>
+              ) : null} */}
+              <canvas
+                className="rounded-lg transition-all shadow-lg shadow-black"
+                ref={canvasRef}
+                width="640"
+                height="480"
+              ></canvas>
+            </div>
+            <div className="grid place-items-center md:my-0 my-6">
+              <div className="w-[80%] bg-gray-100 shadow-sm shadow-[#f3ccd5] rounded-lg p-4 text-xl text-gray-700">
+                <h2>Detecciones</h2>
+                <ul>
+                  {detections.map((det, index) => (
+                    <li key={index}>
+                      Clase:{" "}
+                      <span className="text-5xl text-gray-700 font-bold">
+                        {signos[det.class]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Modal de carga */}
+        {false && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+            <div className="gradient-shadow bg-gradient-to-tr  from-[#f3ccd5] to-[#757db5] grid place-items-center p-6 rounded-full shadow-lg text-center animate-spin">
+              <CircularProgress
+                color="secondary"
+                size="lg"
+                aria-label="Loading..."
+              />
+            </div>
+          </div>
+        )}
+        <ToastContainer />
       </div>
-      <ToastContainer />
-    </div>
+    </>
   );
 };
 

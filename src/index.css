@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+
+.text-shadow {
+    text-shadow: 2px 1px 2px #5c6081;
+}
+
+.gradient-shadow {
+    box-shadow: 0 4px 8px rgba(9, 61, 94, 0.763),
+        0 0 0 1px rgba(230, 83, 169, 0.941);
+
+
+
+}
